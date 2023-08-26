@@ -21,6 +21,7 @@ def model2annotations(model_path, img_dir_list, save_dir, save_json=False):
         img_dir_list = [img_dir_list]
     cuda = torch.cuda.is_available()
     device = 'cuda' if cuda else 'cpu'
+    print('Using device ' + device)
     model = TextDetector(model_path=model_path, input_size=1024, device=device, act='leaky')  
     imglist = []
     for img_dir in img_dir_list:
@@ -74,6 +75,7 @@ def preprocess_img(img, input_size=(1024, 1024), device='cpu', bgr2rgb=True, hal
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img_in, ratio, (dw, dh) = letterbox(img, new_shape=input_size, auto=False, stride=64)
     if to_tensor:
+        print('img_in type', type(img_in))
         img_in = img_in.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
         img_in = np.array([np.ascontiguousarray(img_in)]).astype(np.float32) / 255
         if to_tensor:
@@ -99,6 +101,7 @@ def postprocess_mask(img: Union[torch.Tensor, np.ndarray], thresh=None):
     return img.astype(np.uint8)
 
 def postprocess_yolo(det, conf_thresh, nms_thresh, resize_ratio, sort_func=None):
+    print(det)
     det = non_max_suppression(det, conf_thresh, nms_thresh)[0]
     # bbox = det[..., 0:4]
     if det.device != 'cpu':
@@ -141,6 +144,8 @@ class TextDetector:
     @torch.no_grad()
     def __call__(self, img, refine_mode=REFINEMASK_INPAINT, keep_undetected_mask=False):
         img_in, ratio, dw, dh = preprocess_img(img, input_size=self.input_size, device=self.device, half=self.half, to_tensor=self.backend=='torch')
+        print('backend', self.backend)
+        print('img_in', type(img_in), img_in)
         im_h, im_w = img.shape[:2]
 
         blks, mask, lines_map = self.net(img_in)
@@ -199,11 +204,29 @@ def traverse_by_dict(img_dir_list, dict_dir):
         cv2.imshow('mask', mask)
         cv2.waitKey(0)
 
+def extract_text_blocks(json_file, input_file):
+    img = cv2.imread(input_file)
+    blk_list = []
+    with open(json_file, 'r', encoding='utf8') as f:
+        blk_dict_list = json.loads(f.read())
+        blk_list = [TextBlock(**blk_dict) for blk_dict in blk_dict_list]
+    x, y, w, h = blk_list[5].xyxy
+    crop_img = img[y:h, x:w]
+    cv2.imshow("cropped", crop_img)
+    cv2.waitKey(0)
+    
 if __name__ == '__main__':
     device = 'cpu'
-    model_path = 'data/comictextdetector.pt'
+    # model_path = 'data/comictextdetector.pt'
     model_path = 'data/comictextdetector.pt.onnx'
-    img_dir = r'data/examples'
-    save_dir = r'data/backup'
+    #img_dir = r'data/examples'
+    #save_dir = r'data/backup'
+    # img_dir = 'C:/Users/alkdn/Downloads/oretachi/train/2'
+    # save_dir = r'C:/Users/alkdn/Downloads/oretachi/train/2/output'
+    img_dir = 'C:/Users/alkdn/Downloads/oretachi/aaa'
+    save_dir = r'C:/Users/alkdn/Downloads/oretachi/aaa/output'
     model2annotations(model_path, img_dir, save_dir, save_json=True)
-    traverse_by_dict(img_dir, save_dir)
+    # traverse_by_dict(img_dir, save_dir)
+    #input_dir = 'C:/Users/alkdn/Downloads/oretachi/train/2/'
+    #dir = 'C:/Users/alkdn/Downloads/oretachi/train/2/output/'
+    # extract_text_blocks(dir + 'Manga-Zip.info_0005.json', dir + 'Manga-Zip.info_0005.png')

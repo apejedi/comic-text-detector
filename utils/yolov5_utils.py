@@ -129,12 +129,17 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
          list of detections, on (n,6) tensor per image [xyxy, conf, cls]
     """
 
+    print("prediction shape:", prediction.shape)
     if isinstance(prediction, np.ndarray):
         prediction = torch.from_numpy(prediction)
 
     nc = prediction.shape[2] - 5  # number of classes
+    print('prediction[..., 4] conf', prediction[..., 4])
     xc = prediction[..., 4] > conf_thres  # candidates
-
+    print('candidates:', xc)
+    # for i,c in enumerate(prediction[0]):
+    #     if c[4] > conf_thres:
+    #         print('c > conf_thres', c[4])
     # Checks
     assert 0 <= conf_thres <= 1, f'Invalid Confidence threshold {conf_thres}, valid values are between 0.0 and 1.0'
     assert 0 <= iou_thres <= 1, f'Invalid IoU {iou_thres}, valid values are between 0.0 and 1.0'
@@ -167,19 +172,26 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
         if not x.shape[0]:
             continue
 
+        print('idx:', xc[xi])
         # Compute conf
+        print('obj_conf', x[:, 5:])
+        print('cls_conf', x[:, 4:5])
         x[:, 5:] *= x[:, 4:5]  # conf = obj_conf * cls_conf
 
         # Box (center x, center y, width, height) to (x1, y1, x2, y2)
         box = xywh2xyxy(x[:, :4])
+        # print('box', box)
 
         # Detections matrix nx6 (xyxy, conf, cls)
         if multi_label:
             i, j = (x[:, 5:] > conf_thres).nonzero(as_tuple=False).T
             x = torch.cat((box[i], x[i, j + 5, None], j[:, None].float()), 1)
         else:  # best class only
+            # Gets max conf value (values after coords) keeping the dimensions, also gets an index?
             conf, j = x[:, 5:].max(1, keepdim=True)
+            print('conf', conf, 'j', j) 
             x = torch.cat((box, conf, j.float()), 1)[conf.view(-1) > conf_thres]
+            print('x after best class', x)
 
         # Filter by class
         if classes is not None:
@@ -199,7 +211,9 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
         # Batched NMS
         c = x[:, 5:6] * (0 if agnostic else max_wh)  # classes
         boxes, scores = x[:, :4] + c, x[:, 4]  # boxes (offset by class), scores
+        print('boxes', boxes, 'scores', scores)
         i = torchvision.ops.nms(boxes, scores, iou_thres)  # NMS
+        print('nms', i)
         if i.shape[0] > max_det:  # limit detections
             i = i[:max_det]
         if merge and (1 < n < 3E3):  # Merge NMS (boxes merged using weighted mean)
@@ -211,6 +225,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
                 i = i[iou.sum(1) > 1]  # require redundancy
 
         output[xi] = x[i]
+        print('x', x, 'x[i]', x[i])
         if (time.time() - t) > time_limit:
             print(f'WARNING: NMS time limit {time_limit}s exceeded')
             break  # time limit exceeded
